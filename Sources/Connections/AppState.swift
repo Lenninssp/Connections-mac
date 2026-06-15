@@ -143,15 +143,15 @@ final class AppState: ObservableObject {
               let toNode = sessions[idx].nodes.first(where: { $0.number == toNumber }),
               fromNode.id != toNode.id else { return }
 
-        let alreadyExists = sessions[idx].edges.contains {
+        pushUndo()
+        if let existingIdx = sessions[idx].edges.firstIndex(where: {
             ($0.fromId == fromNode.id && $0.toId == toNode.id) ||
             ($0.fromId == toNode.id && $0.toId == fromNode.id)
+        }) {
+            sessions[idx].edges[existingIdx].style = style
+        } else {
+            sessions[idx].edges.append(Edge(fromId: fromNode.id, toId: toNode.id, style: style))
         }
-        guard !alreadyExists else { return }
-
-        pushUndo()
-        let edge = Edge(fromId: fromNode.id, toId: toNode.id, style: style)
-        sessions[idx].edges.append(edge)
         saveCurrentSession()
         physics.update(nodes: sessions[idx].nodes, edges: sessions[idx].edges)
     }
