@@ -162,7 +162,7 @@ struct GraphCanvas: View {
 
             // Number label inside
             ctx.draw(
-                Text("\(node.number)")
+                Text(NodeLabel.label(for: node.number))
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundColor(isSelected || isTarget ? Color(accent) : .black),
                 at: pos
@@ -237,15 +237,15 @@ struct GraphCanvas: View {
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(state.accentColor)
         case .nodeSelected(let n):
-            Text("[\(n)] selected  ·  c connect  ·  d delete  ·  Esc cancel")
+            Text("[\(NodeLabel.label(for: n))] selected  ·  c connect  ·  d delete  ·  Esc cancel")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.primary)
         case .connectingFrom(let n):
-            Text("From [\(n)] → press number to connect to  ·  Esc cancel")
+            Text("From [\(NodeLabel.label(for: n))] → press key to connect to  ·  Esc cancel")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(state.accentColor)
         case .choosingEdgeStyle(let f, let t):
-            Text("[\(f)]→[\(t)]  1 line  2 arrow  3 dashed  4 dashed arrow  ·  Esc cancel")
+            Text("[\(NodeLabel.label(for: f))]→[\(NodeLabel.label(for: t))]  1 line  2 arrow  3 dashed  4 dashed arrow  ·  Esc cancel")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(state.accentColor)
         }

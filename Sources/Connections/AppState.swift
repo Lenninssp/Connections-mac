@@ -240,7 +240,7 @@ final class AppState: ObservableObject {
                 keyboardMode = .addingNode
                 return nil
             }
-            if let n = Int(chars), (1...9).contains(n) {
+            if let n = NodeLabel.number(forKey: chars) {
                 if currentSession?.nodes.first(where: { $0.number == n }) != nil {
                     keyboardMode = .nodeSelected(n)
                     return nil
@@ -261,7 +261,7 @@ final class AppState: ObservableObject {
                 keyboardMode = .idle
                 return nil
             }
-            if let m = Int(chars), (1...9).contains(m), m != n {
+            if let m = NodeLabel.number(forKey: chars), m != n {
                 if currentSession?.nodes.first(where: { $0.number == m }) != nil {
                     keyboardMode = .nodeSelected(m)
                     return nil
@@ -273,7 +273,7 @@ final class AppState: ObservableObject {
                 keyboardMode = .idle
                 return nil
             }
-            if let to = Int(chars), (1...9).contains(to), to != from {
+            if let to = NodeLabel.number(forKey: chars), to != from {
                 if currentSession?.nodes.first(where: { $0.number == to }) != nil {
                     keyboardMode = .choosingEdgeStyle(from: from, to: to)
                     return nil
