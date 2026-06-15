@@ -22,6 +22,12 @@ mkdir -p "$MACOS" "$RESOURCES"
 cp .build/release/Connections "$MACOS/Connections"
 cp Sources/Connections/Resources/Info.plist "$CONTENTS/Info.plist"
 
+# Generate app icon
+echo "Generating icon..."
+swift make_icon.swift
+iconutil -c icns Connections.iconset -o "$RESOURCES/AppIcon.icns"
+rm -rf Connections.iconset
+
 echo "Built: $APP"
 echo "Launching..."
 open "$APP"

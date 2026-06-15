@@ -3,6 +3,7 @@ import Combine
 
 enum KeyboardMode: Equatable {
     case idle
+    case addingNode
     case nodeSelected(Int)
     case connectingFrom(Int)
     case choosingEdgeStyle(from: Int, to: Int)
@@ -23,6 +24,7 @@ final class AppState: ObservableObject {
     private let physics = ForceDirectedLayout()
     private var undoStack: [Session] = []
     private var keyMonitor: Any?
+    private(set) var canvasCenter: CGPoint = CGPoint(x: 400, y: 300)
 
     var currentSession: Session? {
         get { sessions.first { $0.id == currentSessionId } }
@@ -116,6 +118,24 @@ final class AppState: ObservableObject {
         isGenerating = false
     }
 
+    func addNode(word: String) {
+        let word = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty,
+              let id = currentSessionId,
+              let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        pushUndo()
+        let nextNumber = (sessions[idx].nodes.map(\.number).max() ?? 0) + 1
+        let angle = Double.random(in: 0..<(2 * .pi))
+        let offset: Double = 80
+        let pos = CGPoint(x: canvasCenter.x + offset * cos(angle),
+                          y: canvasCenter.y + offset * sin(angle))
+        let node = WordNode(word: word, number: nextNumber, position: pos)
+        sessions[idx].nodes.append(node)
+        saveCurrentSession()
+        physics.update(nodes: sessions[idx].nodes, edges: sessions[idx].edges)
+        keyboardMode = .idle
+    }
+
     func addEdge(from fromNumber: Int, to toNumber: Int, style: EdgeStyle) {
         guard let id = currentSessionId,
               let idx = sessions.firstIndex(where: { $0.id == id }),
@@ -175,6 +195,7 @@ final class AppState: ObservableObject {
     }
 
     func updateCanvasCenter(_ center: CGPoint) {
+        canvasCenter = center
         physics.updateCenter(center)
     }
 
@@ -191,6 +212,15 @@ final class AppState: ObservableObject {
         let chars = event.charactersIgnoringModifiers ?? ""
         let mods = event.modifierFlags
 
+        // While adding a node, pass everything through except Esc
+        if keyboardMode == .addingNode {
+            if event.keyCode == 53 {
+                keyboardMode = .idle
+                return nil
+            }
+            return event
+        }
+
         // Global shortcuts
         if mods.contains(.command) {
             switch chars {
@@ -202,7 +232,14 @@ final class AppState: ObservableObject {
         }
 
         switch keyboardMode {
+        case .addingNode:
+            return event // unreachable, handled above
+
         case .idle:
+            if chars == "n" {
+                keyboardMode = .addingNode
+                return nil
+            }
             if let n = Int(chars), (1...9).contains(n) {
                 if currentSession?.nodes.first(where: { $0.number == n }) != nil {
                     keyboardMode = .nodeSelected(n)
@@ -273,8 +310,7 @@ final class AppState: ObservableObject {
 
     private func restartPhysics() {
         guard let session = currentSession else { return }
-        let center = CGPoint(x: 400, y: 300) // default; updated by canvas
-        physics.start(nodes: session.nodes, edges: session.edges, center: center)
+        physics.start(nodes: session.nodes, edges: session.edges, center: canvasCenter)
     }
 
     // MARK: - Accent color persistence

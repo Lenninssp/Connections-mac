@@ -22,6 +22,8 @@
     <true/>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

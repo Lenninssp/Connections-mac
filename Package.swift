@@ -8,9 +8,7 @@ let package = Package(
         .executableTarget(
             name: "Connections",
             path: "Sources/Connections",
-            resources: [
-                .copy("Resources/Info.plist")
-            ],
+            exclude: ["Resources/Info.plist"],
             linkerSettings: [
                 .linkedLibrary("sqlite3")
             ]

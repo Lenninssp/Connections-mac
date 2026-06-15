@@ -4,6 +4,8 @@ struct GraphCanvas: View {
     @EnvironmentObject var state: AppState
     @State private var draggingNodeId: UUID?
     @State private var lastDragPosition: CGPoint = .zero
+    @State private var newNodeText: String = ""
+    @FocusState private var nodeInputFocused: Bool
 
     private let nodeRadius: CGFloat = 28
 
@@ -23,10 +25,50 @@ struct GraphCanvas: View {
                 .gesture(dragGesture)
 
                 hudOverlay
+
+                if state.keyboardMode == .addingNode {
+                    nodeInputOverlay
+                }
             }
             .onAppear { state.updateCanvasCenter(CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)) }
             .onChange(of: geo.size) { size in
                 state.updateCanvasCenter(CGPoint(x: size.width / 2, y: size.height / 2))
+            }
+        }
+    }
+
+    // MARK: - Node Input Overlay
+
+    private var nodeInputOverlay: some View {
+        VStack(spacing: 8) {
+            Text("New node")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            TextField("Type a word…", text: $newNodeText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .multilineTextAlignment(.center)
+                .focused($nodeInputFocused)
+                .onSubmit {
+                    state.addNode(word: newNodeText)
+                    newNodeText = ""
+                }
+                .frame(width: 200)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(state.accentColor, lineWidth: 1.5))
+        .shadow(color: .black.opacity(0.12), radius: 16, x: 0, y: 4)
+        .onAppear {
+            newNodeText = ""
+            nodeInputFocused = true
+        }
+        .onChange(of: state.keyboardMode) { mode in
+            if mode != .addingNode {
+                newNodeText = ""
+                nodeInputFocused = false
             }
         }
     }
@@ -187,9 +229,13 @@ struct GraphCanvas: View {
     private var hudText: some View {
         switch state.keyboardMode {
         case .idle:
-            Text("Press 1–9 to select a node")
+            Text("n add node  ·  1–9 select")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.secondary)
+        case .addingNode:
+            Text("Type word · Enter to confirm · Esc to cancel")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(state.accentColor)
         case .nodeSelected(let n):
             Text("[\(n)] selected  ·  c connect  ·  d delete  ·  Esc cancel")
                 .font(.system(size: 11, design: .monospaced))
