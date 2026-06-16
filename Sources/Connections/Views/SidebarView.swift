@@ -25,6 +25,7 @@ struct SidebarView: View {
                             accent: state.accentColor,
                             onSelect: { state.selectSession(session.id) },
                             onDelete: { state.deleteSession(id: session.id) },
+                            onDuplicate: { state.duplicateSession(id: session.id) },
                             onRename: {
                                 editingId = session.id
                                 editingName = session.name
@@ -70,6 +71,7 @@ struct SessionRow: View {
     let accent: Color
     let onSelect: () -> Void
     let onDelete: () -> Void
+    let onDuplicate: () -> Void
     let onRename: () -> Void
     let onCommitRename: () -> Void
 
@@ -103,6 +105,7 @@ struct SessionRow: View {
                 .onTapGesture { onSelect() }
                 .contextMenu {
                     Button("Rename") { onRename() }
+                    Button("Duplicate") { onDuplicate() }
                     Divider()
                     Button("Delete", role: .destructive) { onDelete() }
                 }

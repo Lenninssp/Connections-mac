@@ -76,6 +76,28 @@ final class AppState: ObservableObject {
         db.renameSession(id: id, name: name)
     }
 
+    func duplicateSession(id: UUID) {
+        guard let original = sessions.first(where: { $0.id == id }) else { return }
+        // Deep copy with fresh UUIDs so nodes and edges are independent
+        let newId = UUID()
+        var copy = Session(id: newId, name: "\(original.name) (copy)",
+                           paragraph: original.paragraph, createdAt: Date())
+        var nodeIdMap: [UUID: UUID] = [:]
+        copy.nodes = original.nodes.map { node in
+            let newNodeId = UUID()
+            nodeIdMap[node.id] = newNodeId
+            return WordNode(id: newNodeId, word: node.word, number: node.number, position: node.position)
+        }
+        copy.edges = original.edges.compactMap { edge in
+            guard let newFrom = nodeIdMap[edge.fromId],
+                  let newTo = nodeIdMap[edge.toId] else { return nil }
+            return Edge(id: UUID(), fromId: newFrom, toId: newTo, style: edge.style)
+        }
+        sessions.insert(copy, at: 0)
+        db.saveSession(copy)
+        selectSession(newId)
+    }
+
     // MARK: - Graph Operations
 
     func generateKeywords(from paragraph: String, canvasCenter: CGPoint) async {
@@ -218,6 +240,11 @@ final class AppState: ObservableObject {
                 keyboardMode = .idle
                 return nil
             }
+            return event
+        }
+
+        // Pass through all keys when any other text field/editor has focus
+        if NSApp.keyWindow?.firstResponder is NSText {
             return event
         }
 
