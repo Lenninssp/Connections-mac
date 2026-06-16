@@ -88,7 +88,7 @@ struct InputPanelView: View {
 
     private func generate() {
         let text = paragraph
-        Task { await state.generateKeywords(from: text, canvasCenter: CGPoint(x: 400, y: 300)) }
+        Task { await state.generateKeywords(from: text) }
     }
 }
 

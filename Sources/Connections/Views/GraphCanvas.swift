@@ -15,6 +15,10 @@ struct GraphCanvas: View {
                 Color.white
 
                 Canvas { ctx, size in
+                    ctx.transform = CGAffineTransform(translationX: state.viewOffset.x,
+                                                      y: state.viewOffset.y)
+                        .scaledBy(x: state.viewScale, y: state.viewScale)
+
                     let nodes = state.currentSession?.nodes ?? []
                     let edges = state.currentSession?.edges ?? []
                     let accent = NSColor(state.accentColor)
@@ -183,7 +187,7 @@ struct GraphCanvas: View {
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
-                let loc = value.location
+                let loc = toWorld(value.location)
                 if draggingNodeId == nil {
                     let nodes = state.currentSession?.nodes ?? []
                     if let nearest = nodes.min(by: {
@@ -201,6 +205,11 @@ struct GraphCanvas: View {
                 if let id = draggingNodeId { state.unpinNode(id: id) }
                 draggingNodeId = nil
             }
+    }
+
+    private func toWorld(_ screen: CGPoint) -> CGPoint {
+        CGPoint(x: (screen.x - state.viewOffset.x) / state.viewScale,
+                y: (screen.y - state.viewOffset.y) / state.viewScale)
     }
 
     private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {

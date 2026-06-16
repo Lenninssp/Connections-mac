@@ -19,12 +19,22 @@ final class AppState: ObservableObject {
     @Published var useAI: Bool = true
     @Published var wordCount: Int = 4
     @Published var accentColor: Color = Color(red: 0.2, green: 0.4, blue: 1.0)
+    @Published var viewScale: CGFloat = 1.0
+    @Published var viewOffset: CGPoint = .zero
 
     private let db = DatabaseManager.shared
     private let physics = ForceDirectedLayout()
     private var undoStack: [Session] = []
     private var keyMonitor: Any?
+    private var scrollMonitor: Any?
+    private var magnifyMonitor: Any?
+    private var magnifyBaseScale: CGFloat = 1.0
     private(set) var canvasCenter: CGPoint = CGPoint(x: 400, y: 300)
+
+    var worldCenter: CGPoint {
+        CGPoint(x: (canvasCenter.x - viewOffset.x) / viewScale,
+                y: (canvasCenter.y - viewOffset.y) / viewScale)
+    }
 
     var currentSession: Session? {
         get { sessions.first { $0.id == currentSessionId } }
@@ -40,6 +50,7 @@ final class AppState: ObservableObject {
             self.sessions[idx].nodes = updatedNodes
         }
         setupKeyMonitor()
+        setupTrackpadMonitors()
     }
 
     // MARK: - Sessions
@@ -100,7 +111,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Graph Operations
 
-    func generateKeywords(from paragraph: String, canvasCenter: CGPoint) async {
+    func generateKeywords(from paragraph: String) async {
         guard !paragraph.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard let id = currentSessionId,
               let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
@@ -119,11 +130,12 @@ final class AppState: ObservableObject {
 
             let spread: Double = 120
             let nodeCount = words.count
+            let wc = worldCenter
             var newNodes: [WordNode] = []
             for (i, word) in words.enumerated() {
                 let angle = (Double(i) / Double(nodeCount)) * 2 * .pi
-                let x = canvasCenter.x + spread * cos(angle)
-                let y = canvasCenter.y + spread * sin(angle)
+                let x = wc.x + spread * cos(angle)
+                let y = wc.y + spread * sin(angle)
                 let node = WordNode(word: word, number: i + 1, position: CGPoint(x: x, y: y))
                 newNodes.append(node)
             }
@@ -148,9 +160,10 @@ final class AppState: ObservableObject {
         pushUndo()
         let nextNumber = (sessions[idx].nodes.map(\.number).max() ?? 0) + 1
         let angle = Double.random(in: 0..<(2 * .pi))
-        let offset: Double = 80
-        let pos = CGPoint(x: canvasCenter.x + offset * cos(angle),
-                          y: canvasCenter.y + offset * sin(angle))
+        let spread: Double = 80
+        let wc = worldCenter
+        let pos = CGPoint(x: wc.x + spread * cos(angle),
+                          y: wc.y + spread * sin(angle))
         let node = WordNode(word: word, number: nextNumber, position: pos)
         sessions[idx].nodes.append(node)
         saveCurrentSession()
@@ -221,12 +234,63 @@ final class AppState: ObservableObject {
         physics.updateCenter(center)
     }
 
+    // MARK: - Viewport
+
+    func zoomIn() {
+        setScale(min(5.0, viewScale * 1.25), anchor: canvasCenter)
+    }
+
+    func zoomOut() {
+        setScale(max(0.15, viewScale / 1.25), anchor: canvasCenter)
+    }
+
+    func resetView() {
+        viewScale = 1.0
+        viewOffset = .zero
+    }
+
+    func pan(dx: CGFloat, dy: CGFloat) {
+        viewOffset.x += dx
+        viewOffset.y += dy
+    }
+
+    func setScale(_ newScale: CGFloat, anchor: CGPoint) {
+        let factor = newScale / viewScale
+        viewOffset.x = anchor.x - (anchor.x - viewOffset.x) * factor
+        viewOffset.y = anchor.y - (anchor.y - viewOffset.y) * factor
+        viewScale = newScale
+    }
+
     // MARK: - Keyboard
 
     private func setupKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             return self.handleKey(event)
+        }
+    }
+
+    private func setupTrackpadMonitors() {
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self else { return event }
+            guard !(NSApp.keyWindow?.firstResponder is NSText) else { return event }
+            let dx = event.hasPreciseScrollingDeltas ? event.scrollingDeltaX : event.scrollingDeltaX * 12
+            let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 12
+            self.pan(dx: dx, dy: dy)
+            return event
+        }
+
+        magnifyMonitor = NSEvent.addLocalMonitorForEvents(matching: .magnify) { [weak self] event in
+            guard let self else { return event }
+            guard !(NSApp.keyWindow?.firstResponder is NSText) else { return event }
+            if event.phase.contains(.began) { self.magnifyBaseScale = self.viewScale }
+            let newScale = min(5.0, max(0.15, self.magnifyBaseScale * (1 + event.magnification)))
+            // Zoom toward the cursor position
+            let mouseInWindow = event.locationInWindow
+            let winH = NSApp.keyWindow?.contentView?.frame.height ?? self.canvasCenter.y * 2
+            let anchor = CGPoint(x: mouseInWindow.x, y: winH - mouseInWindow.y)
+            self.setScale(newScale, anchor: anchor)
+            return event
         }
     }
 
@@ -253,6 +317,18 @@ final class AppState: ObservableObject {
             switch chars {
             case "z": undo(); return nil
             case "n": newSession(); return nil
+            case "=", "+": zoomIn(); return nil
+            case "-", "_": zoomOut(); return nil
+            case "0": resetView(); return nil
+            default: break
+            }
+            // Cmd+Arrow: pan
+            let panStep: CGFloat = 60
+            switch event.keyCode {
+            case 123: pan(dx:  panStep, dy: 0); return nil  // ←
+            case 124: pan(dx: -panStep, dy: 0); return nil  // →
+            case 126: pan(dx: 0, dy:  panStep); return nil  // ↑
+            case 125: pan(dx: 0, dy: -panStep); return nil  // ↓
             default: break
             }
             return event
