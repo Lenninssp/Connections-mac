@@ -33,6 +33,9 @@ struct GraphCanvas: View {
                 if state.keyboardMode == .addingNode {
                     nodeInputOverlay
                 }
+                if case .choosingNodeColor = state.keyboardMode {
+                    colorPickerOverlay
+                }
             }
             .onAppear { state.updateCanvasCenter(CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)) }
             .onChange(of: geo.size) { size in
@@ -75,6 +78,52 @@ struct GraphCanvas: View {
                 nodeInputFocused = false
             }
         }
+    }
+
+    // MARK: - Color Picker Overlay
+
+    private var colorPickerOverlay: some View {
+        VStack(spacing: 10) {
+            Text("Choose color")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+            HStack(spacing: 8) {
+                ForEach(0..<NodeColor.palette.count, id: \.self) { i in
+                    let entry = NodeColor.palette[i]
+                    VStack(spacing: 4) {
+                        Circle()
+                            .fill(entry.color)
+                            .frame(width: 26, height: 26)
+                            .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
+                            .shadow(color: entry.color.opacity(0.4), radius: 4, x: 0, y: 2)
+                        Text("\(i + 1)")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                // Clear option
+                VStack(spacing: 4) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 26, height: 26)
+                            .overlay(Circle().stroke(Color.black.opacity(0.25), lineWidth: 1))
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
+                    Text("0")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
+        .shadow(color: .black.opacity(0.14), radius: 20, x: 0, y: 6)
     }
 
     // MARK: - Drawing
@@ -133,6 +182,7 @@ struct GraphCanvas: View {
             case .nodeSelected(let n): return n
             case .connectingFrom(let n): return n
             case .choosingEdgeStyle(let f, _): return f
+            case .choosingNodeColor(let n): return n
             default: return nil
             }
         }()
@@ -148,27 +198,38 @@ struct GraphCanvas: View {
 
             let isSelected = node.number == selectedNumber
             let isTarget = node.number == targetNumber
+            let nodeColor = NodeColor.color(for: node.colorIndex)
 
-            // Shadow for selected
+            // Glow for selected/target
             if isSelected || isTarget {
-                let glow = CGRect(x: rect.minX - 4, y: rect.minY - 4,
-                                  width: rect.width + 8, height: rect.height + 8)
-                ctx.fill(Path(ellipseIn: glow), with: .color(Color(accent).opacity(0.25)))
+                let glowColor = nodeColor ?? Color(accent)
+                let glow = CGRect(x: rect.minX - 5, y: rect.minY - 5,
+                                  width: rect.width + 10, height: rect.height + 10)
+                ctx.fill(Path(ellipseIn: glow), with: .color(glowColor.opacity(0.22)))
             }
 
-            // Fill
-            ctx.fill(Path(ellipseIn: rect), with: .color(.white))
+            // Fill: tinted if colored, white if default
+            let fillColor: Color = nodeColor.map { $0.opacity(0.13) } ?? .white
+            ctx.fill(Path(ellipseIn: rect), with: .color(fillColor))
 
-            // Border
-            let borderColor: Color = (isSelected || isTarget) ? Color(accent) : Color.black.opacity(0.8)
-            let borderWidth: CGFloat = (isSelected || isTarget) ? 2.5 : 1.5
+            // Border: node color > accent (selected) > default black
+            let borderColor: Color
+            let borderWidth: CGFloat
+            if let nc = nodeColor {
+                borderColor = (isSelected || isTarget) ? nc : nc.opacity(0.85)
+                borderWidth = (isSelected || isTarget) ? 2.5 : 2.0
+            } else {
+                borderColor = (isSelected || isTarget) ? Color(accent) : Color.black.opacity(0.75)
+                borderWidth = (isSelected || isTarget) ? 2.5 : 1.5
+            }
             ctx.stroke(Path(ellipseIn: rect), with: .color(borderColor), lineWidth: borderWidth)
 
-            // Number label inside
+            // Number label
+            let labelColor: Color = nodeColor ?? ((isSelected || isTarget) ? Color(accent) : .black)
             ctx.draw(
                 Text(NodeLabel.label(for: node.number))
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundColor(isSelected || isTarget ? Color(accent) : .black),
+                    .foregroundColor(labelColor),
                 at: pos
             )
 
@@ -246,7 +307,7 @@ struct GraphCanvas: View {
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(state.accentColor)
         case .nodeSelected(let n):
-            Text("[\(NodeLabel.label(for: n))] selected  ·  c connect  ·  d delete  ·  Esc cancel")
+            Text("[\(NodeLabel.label(for: n))] selected  ·  c connect  ·  p color  ·  d delete  ·  Esc cancel")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.primary)
         case .connectingFrom(let n):
@@ -255,6 +316,10 @@ struct GraphCanvas: View {
                 .foregroundColor(state.accentColor)
         case .choosingEdgeStyle(let f, let t):
             Text("[\(NodeLabel.label(for: f))]→[\(NodeLabel.label(for: t))]  1 line  2 arrow  3 dashed  4 dashed arrow  ·  Esc cancel")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(state.accentColor)
+        case .choosingNodeColor(let n):
+            Text("[\(NodeLabel.label(for: n))] color  ·  1–9 pick  ·  0 clear  ·  Esc back")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(state.accentColor)
         }

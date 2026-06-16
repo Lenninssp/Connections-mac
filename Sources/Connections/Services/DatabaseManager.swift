@@ -51,6 +51,8 @@ final class DatabaseManager {
         );
         """
         sqlite3_exec(db, sql, nil, nil, nil)
+        // Non-destructive migration: add color_index if the column doesn't exist yet
+        sqlite3_exec(db, "ALTER TABLE nodes ADD COLUMN color_index INTEGER;", nil, nil, nil)
     }
 
     // MARK: - Sessions
@@ -121,7 +123,7 @@ final class DatabaseManager {
     private func loadNodes(sessionId: UUID) -> [WordNode] {
         var nodes: [WordNode] = []
         var stmt: OpaquePointer?
-        let sql = "SELECT id, word, number, position_x, position_y FROM nodes WHERE session_id = ? ORDER BY number;"
+        let sql = "SELECT id, word, number, position_x, position_y, color_index FROM nodes WHERE session_id = ? ORDER BY number;"
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
         let s = sessionId.uuidString as NSString
@@ -132,14 +134,17 @@ final class DatabaseManager {
             let number = Int(sqlite3_column_int(stmt, 2))
             let x = sqlite3_column_double(stmt, 3)
             let y = sqlite3_column_double(stmt, 4)
-            nodes.append(WordNode(id: id, word: word, number: number, position: CGPoint(x: x, y: y)))
+            let colorIndex: Int? = sqlite3_column_type(stmt, 5) == SQLITE_NULL
+                ? nil : Int(sqlite3_column_int(stmt, 5))
+            nodes.append(WordNode(id: id, word: word, number: number,
+                                  position: CGPoint(x: x, y: y), colorIndex: colorIndex))
         }
         return nodes
     }
 
     private func saveNode(_ node: WordNode, sessionId: UUID) {
         var stmt: OpaquePointer?
-        let sql = "INSERT OR REPLACE INTO nodes (id, session_id, word, number, position_x, position_y) VALUES (?, ?, ?, ?, ?, ?);"
+        let sql = "INSERT OR REPLACE INTO nodes (id, session_id, word, number, position_x, position_y, color_index) VALUES (?, ?, ?, ?, ?, ?, ?);"
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
         let idStr = node.id.uuidString as NSString
@@ -151,6 +156,11 @@ final class DatabaseManager {
         sqlite3_bind_int(stmt, 4, Int32(node.number))
         sqlite3_bind_double(stmt, 5, Double(node.position.x))
         sqlite3_bind_double(stmt, 6, Double(node.position.y))
+        if let ci = node.colorIndex {
+            sqlite3_bind_int(stmt, 7, Int32(ci))
+        } else {
+            sqlite3_bind_null(stmt, 7)
+        }
         sqlite3_step(stmt)
     }
 

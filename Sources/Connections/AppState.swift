@@ -7,6 +7,7 @@ enum KeyboardMode: Equatable {
     case nodeSelected(Int)
     case connectingFrom(Int)
     case choosingEdgeStyle(from: Int, to: Int)
+    case choosingNodeColor(Int)
 }
 
 @MainActor
@@ -206,6 +207,15 @@ final class AppState: ObservableObject {
         physics.update(nodes: sessions[idx].nodes, edges: sessions[idx].edges)
     }
 
+    func setNodeColor(number: Int, colorIndex: Int?) {
+        guard let id = currentSessionId,
+              let sIdx = sessions.firstIndex(where: { $0.id == id }),
+              let nIdx = sessions[sIdx].nodes.firstIndex(where: { $0.number == number }) else { return }
+        pushUndo()
+        sessions[sIdx].nodes[nIdx].colorIndex = colorIndex
+        saveCurrentSession()
+    }
+
     func undo() {
         guard let saved = undoStack.popLast(),
               let idx = sessions.firstIndex(where: { $0.id == saved.id }) else { return }
@@ -364,11 +374,31 @@ final class AppState: ObservableObject {
                 keyboardMode = .idle
                 return nil
             }
+            if chars == "p" {
+                keyboardMode = .choosingNodeColor(n)
+                return nil
+            }
             if let m = NodeLabel.number(forKey: chars), m != n {
                 if currentSession?.nodes.first(where: { $0.number == m }) != nil {
                     keyboardMode = .nodeSelected(m)
                     return nil
                 }
+            }
+
+        case .choosingNodeColor(let n):
+            if event.keyCode == 53 { // Esc
+                keyboardMode = .nodeSelected(n)
+                return nil
+            }
+            if chars == "0" {
+                setNodeColor(number: n, colorIndex: nil)
+                keyboardMode = .nodeSelected(n)
+                return nil
+            }
+            if let i = Int(chars), (1...9).contains(i) {
+                setNodeColor(number: n, colorIndex: i)
+                keyboardMode = .nodeSelected(n)
+                return nil
             }
 
         case .connectingFrom(let from):
